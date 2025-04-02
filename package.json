@@ -1,0 +1,44 @@
+{
+  "name": "grid-app-template",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "prebuild": "node ./pre-build.mjs",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@ai-sdk/groq": "^1.1.13",
+    "@ai-sdk/react": "^1.1.23",
+    "@erc725/erc725.js": "^0.27.2",
+    "@lukso/up-provider": "^0.3.2",
+    "@lukso/web-components": "^1.104.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "ai": "^4.1.60",
+    "class-variance-authority": "^0.7.1",
+    "ethereum-blockies-base64": "^1.0.2",
+    "graphql": "^16.10.0",
+    "graphql-request": "^7.1.2",
+    "lucide-react": "^0.479.0",
+    "next": "15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "viem": "^2.21.54",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.1.0",
+    "postcss": "^8",
+    "sass": "^1.83.1",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
+  }
+}
