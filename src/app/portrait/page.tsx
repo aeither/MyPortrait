@@ -18,26 +18,59 @@ export default function PortraitPage() {
     ? accounts[0].toLowerCase() 
     : null;
   
-  // State for image editing
+  // State for image and prompt
   const [imageUrl, setImageUrl] = useState("/assets/images/profile-default.svg"); 
-  const [newImageUrl, setNewImageUrl] = useState("");
+  const [prompt, setPrompt] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState("");
   
   // Check if the user is the owner of this portrait
   const isOwner = walletConnected && address === connectedAddress;
   
-  // Handle image save (mock implementation)
-  const handleSaveImage = useCallback(() => {
-    if (newImageUrl.trim()) {
-      setImageUrl(newImageUrl);
+  // Handle image generation
+  const handleGenerateImage = useCallback(async () => {
+    if (!prompt.trim()) {
+      setError("Please enter a description for your portrait");
+      return;
+    }
+    
+    try {
+      setIsGenerating(true);
+      setError("");
+      
+      const response = await fetch("/api/image", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt,
+          systemPrompt: "Create a portrait with a whimsical, hand-drawn animation style. Use soft, watercolor-like backgrounds, vibrant colors, and expressive eyes. The character should have a sense of wonder and innocence, with detailed but simplified features."
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to generate image");
+      }
+      
+      // Set the generated image data
+      setImageUrl(`data:image/webp;base64,${data.image}`);
       setIsEditing(false);
-      setNewImageUrl("");
       
       // Mock saving to R2 and Postgres
-      console.log(`Saved image URL ${newImageUrl} for address ${address}`);
-      alert("Portrait saved successfully!");
+      console.log(`Generated portrait for address ${address} with prompt: ${prompt}`);
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to generate image";
+      setError(errorMessage);
+      console.error("Error generating portrait:", err);
+    } finally {
+      setIsGenerating(false);
     }
-  }, [newImageUrl, address]);
+  }, [prompt, address]);
   
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-zinc-900 to-black">
@@ -70,14 +103,22 @@ export default function PortraitPage() {
           {/* Main Content Area - Only the Image */}
           <div className="flex-1 flex items-center justify-center bg-zinc-900 m-4 rounded-lg overflow-hidden z-0">
             <div className="relative w-full h-full rounded-lg overflow-hidden bg-zinc-800 shadow-xl">
-              <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 z-10"></div>
-              <Image 
-                src={imageUrl} 
-                alt="User Portrait" 
-                fill 
-                style={{ objectFit: "contain" }}
-                className="z-0"
-              />
+              {isGenerating ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
+                  <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-500"></div>
+                </div>
+              ) : (
+                <>
+                  <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 z-10"></div>
+                  <Image 
+                    src={imageUrl} 
+                    alt="User Portrait" 
+                    fill 
+                    style={{ objectFit: "contain" }}
+                    className="z-0"
+                  />
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -92,23 +133,39 @@ export default function PortraitPage() {
           <div className="w-full bg-zinc-800 p-4 rounded-lg">
             {isEditing ? (
               <div className="space-y-3">
-                <input
-                  type="text"
-                  value={newImageUrl}
-                  onChange={(e) => setNewImageUrl(e.target.value)}
-                  placeholder="Enter new image URL"
-                  className="w-full p-3 bg-zinc-700 border border-zinc-600 rounded-md text-zinc-100"
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe yourself or a character for your portrait..."
+                  className="w-full p-3 bg-zinc-700 border border-zinc-600 rounded-md text-zinc-100 min-h-[100px] resize-none"
+                  disabled={isGenerating}
                 />
+                
+                <div className="text-xs text-zinc-400 px-1">
+                  <p>Try prompts like "a young adventurer with short brown hair and a green hat" or "a wise elder with flowing white beard and kind eyes"</p>
+                </div>
+                
+                {error && (
+                  <div className="text-red-500 text-sm p-2 bg-red-500/20 rounded-md">
+                    {error}
+                  </div>
+                )}
+                
                 <div className="flex gap-3">
                   <button
-                    onClick={handleSaveImage}
-                    className="flex-1 px-4 py-2 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors"
+                    onClick={handleGenerateImage}
+                    disabled={isGenerating}
+                    className="flex-1 px-4 py-2 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Save Portrait
+                    {isGenerating ? "Generating..." : "Generate Portrait"}
                   </button>
                   <button
-                    onClick={() => setIsEditing(false)}
-                    className="px-4 py-2 bg-zinc-700 text-zinc-100 rounded-md hover:bg-zinc-600 transition-colors"
+                    onClick={() => {
+                      setIsEditing(false);
+                      setError("");
+                    }}
+                    disabled={isGenerating}
+                    className="px-4 py-2 bg-zinc-700 text-zinc-100 rounded-md hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
@@ -119,7 +176,7 @@ export default function PortraitPage() {
                 onClick={() => setIsEditing(true)}
                 className="w-full px-4 py-2 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors"
               >
-                Edit Portrait
+                Generate New Portrait
               </button>
             )}
           </div>
