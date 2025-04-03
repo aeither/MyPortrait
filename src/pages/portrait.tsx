@@ -1,7 +1,7 @@
-import { useRouter } from "next/router";
-import { useState, useCallback, useEffect } from "react";
-import Image from "next/image";
-import dynamic from 'next/dynamic';
+import React, { useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/dist/client/router";
+import Image from "next/dist/shared/lib/image-external";
+import dynamic from 'next/dist/shared/lib/dynamic';
 
 // Loading fallback component
 function PortraitLoading() {
@@ -18,17 +18,17 @@ function PortraitLoading() {
 // Create a client-only component to avoid React context issues during prerendering
 const PortraitPageClient = () => {
   const router = useRouter();
-  const [accounts, setAccounts] = useState<string[]>([]);
   const [walletConnected, setWalletConnected] = useState(false);
+  const [accounts, setAccounts] = useState<string[]>([]);
   
   // Get address from URL params
   const { address: addressParam } = router.query;
   const address = addressParam ? String(addressParam).toLowerCase() : null;
   
   // Get connected wallet address
-  const connectedAddress = accounts.length > 0 
-    ? accounts[0].toLowerCase() 
-    : null;
+  const connectedAddress = accounts && accounts.length > 0 
+  ? accounts[0].toLowerCase() 
+  : null;
   
   // State for image and prompt
   const [imageUrl, setImageUrl] = useState("/assets/images/profile-default.svg"); 
@@ -222,10 +222,13 @@ const PortraitPageClient = () => {
   );
 };
 
-// Use dynamic import with SSR disabled to avoid React context issues during build
-const PortraitPage = dynamic(() => Promise.resolve(PortraitPageClient), {
-  ssr: false,
-  loading: () => <PortraitLoading />
-});
+// Export a dynamic component with proper React context
+const PortraitPage = dynamic(
+  () => Promise.resolve(() => <PortraitPageClient />),
+  {
+    ssr: false,
+    loading: () => <PortraitLoading />
+  }
+);
 
 export default PortraitPage;
