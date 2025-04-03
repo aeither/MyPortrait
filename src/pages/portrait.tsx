@@ -1,34 +1,23 @@
-import React, { useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/dist/client/router";
-import Image from "next/dist/shared/lib/image-external";
-import dynamic from 'next/dist/shared/lib/dynamic';
+"use client";
 
-// Loading fallback component
-function PortraitLoading() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-zinc-900 to-black">
-      <div className="w-full max-w-sm flex flex-col gap-4 items-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-500"></div>
-        <p className="text-zinc-400">Loading portrait...</p>
-      </div>
-    </div>
-  );
-}
+import { useSearchParams } from "next/navigation";
+import { useState, useCallback, Suspense } from "react";
+import Image from "next/image";
+import { UpProvider, useUpProvider } from "../components/upProvider";
 
-// Create a client-only component to avoid React context issues during prerendering
-const PortraitPageClient = () => {
-  const router = useRouter();
-  const [walletConnected, setWalletConnected] = useState(false);
-  const [accounts, setAccounts] = useState<string[]>([]);
+// Separate component that uses useSearchParams
+function PortraitContent() {
+  const searchParams = useSearchParams();
+  const { accounts, walletConnected } = useUpProvider();
   
   // Get address from URL params
-  const { address: addressParam } = router.query;
-  const address = addressParam ? String(addressParam).toLowerCase() : null;
+  const addressParam = searchParams.get("address");
+  const address = addressParam ? addressParam.toLowerCase() : null;
   
   // Get connected wallet address
-  const connectedAddress = accounts && accounts.length > 0 
-  ? accounts[0].toLowerCase() 
-  : null;
+  const connectedAddress = accounts.length > 0 
+    ? accounts[0].toLowerCase() 
+    : null;
   
   // State for image and prompt
   const [imageUrl, setImageUrl] = useState("/assets/images/profile-default.svg"); 
@@ -36,25 +25,6 @@ const PortraitPageClient = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
-
-  // Simulate walletConnected and accounts that would normally come from useUpProvider
-  useEffect(() => {
-    // This will only run on the client side
-    const checkWallet = async () => {
-      try {
-        // Just a placeholder - in production we'd use actual wallet connection
-        const connected = localStorage.getItem('walletConnected') === 'true';
-        const savedAccounts = JSON.parse(localStorage.getItem('accounts') || '[]');
-        
-        setWalletConnected(connected);
-        setAccounts(savedAccounts);
-      } catch (error) {
-        console.error("Error checking wallet:", error);
-      }
-    };
-    
-    checkWallet();
-  }, []);
   
   // Check if the user is the owner of this portrait
   const isOwner = walletConnected && address === connectedAddress;
@@ -102,11 +72,6 @@ const PortraitPageClient = () => {
       setIsGenerating(false);
     }
   }, [prompt, address]);
-  
-  // Return loading state if address is not yet available
-  if (router.isReady === false) {
-    return <PortraitLoading />;
-  }
   
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-zinc-900 to-black">
@@ -220,15 +185,27 @@ const PortraitPageClient = () => {
       </div>
     </div>
   );
-};
+}
 
-// Export a dynamic component with proper React context
-const PortraitPage = dynamic(
-  () => Promise.resolve(() => <PortraitPageClient />),
-  {
-    ssr: false,
-    loading: () => <PortraitLoading />
-  }
-);
+// Loading fallback component
+function PortraitLoading() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-zinc-900 to-black">
+      <div className="w-full max-w-sm flex flex-col gap-4 items-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-500"></div>
+        <p className="text-zinc-400">Loading portrait...</p>
+      </div>
+    </div>
+  );
+}
 
-export default PortraitPage;
+// Main component with Suspense boundary
+export default function PortraitPage() {
+  return (
+    <Suspense fallback={<PortraitLoading />}>
+      <UpProvider>
+        <PortraitContent />
+      </UpProvider>
+    </Suspense>
+  );
+}
