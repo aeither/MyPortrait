@@ -12,7 +12,7 @@ import { type FormEvent, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { parseUnits } from "viem";
 import { waitForTransactionReceipt } from "viem/actions";
-import { UpProvider, useUpProvider } from "../components/upProvider";
+import { useUpProvider } from "../components/upProvider";
 
 // Donation constants
 const MIN_DONATION_AMOUNT = 0.001;
@@ -227,8 +227,6 @@ function ChatContent() {
 
 export default function Chat() {
   return (
-    <UpProvider>
-      <ChatContent />
-    </UpProvider>
+    <ChatContent />
   );
 }
