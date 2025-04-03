@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useState, useCallback, Suspense } from "react";
+import { useState, useCallback, Suspense, useEffect } from "react";
 import Image from "next/image";
 import { UpProvider, useUpProvider } from "../components/upProvider";
 
@@ -20,14 +20,49 @@ function PortraitContent() {
     : null;
   
   // State for image and prompt
-  const [imageUrl, setImageUrl] = useState("/assets/images/profile-default.svg"); 
+  const [imageUrl, setImageUrl] = useState("");
+  const [tempImageData, setTempImageData] = useState(""); 
   const [prompt, setPrompt] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [hasPortrait, setHasPortrait] = useState(false);
   
   // Check if the user is the owner of this portrait
   const isOwner = walletConnected && address === connectedAddress;
+
+  // Fetch portrait from database when component mounts
+  useEffect(() => {
+    async function fetchPortrait() {
+      if (!address) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/portrait?address=${address}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.imageUrl) {
+            setImageUrl(data.imageUrl);
+            setHasPortrait(true);
+          }
+        } else {
+          console.log("No existing portrait found");
+        }
+      } catch (error) {
+        console.error("Error fetching portrait:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchPortrait();
+  }, [address]);
   
   // Handle image generation
   const handleGenerateImage = useCallback(async () => {
@@ -40,7 +75,7 @@ function PortraitContent() {
       setIsGenerating(true);
       setError("");
       
-      const response = await fetch("/api/image", {
+      const response = await fetch("/api/portrait", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -57,12 +92,11 @@ function PortraitContent() {
         throw new Error(data.error || "Failed to generate image");
       }
       
-      // Set the generated image data
-      setImageUrl(`data:image/webp;base64,${data.image}`);
-      setIsEditing(false);
+      // Save the generated image data to state (not saved to R2 yet)
+      setTempImageData(data.imageData);
       
-      // Mock saving to R2 and Postgres
-      console.log(`Generated portrait for address ${address} with prompt: ${prompt}`);
+      // Display the image in the UI
+      setImageUrl(`data:image/webp;base64,${data.imageData}`);
       
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to generate image";
@@ -71,7 +105,72 @@ function PortraitContent() {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, address]);
+  }, [prompt]);
+  
+  // Handle saving the generated image to R2 and database
+  const handleSavePortrait = useCallback(async () => {
+    if (!address || !tempImageData) {
+      setError("Cannot save portrait: missing address or image data");
+      return;
+    }
+    
+    try {
+      setIsSaving(true);
+      setError("");
+      
+      const response = await fetch("/api/portrait", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          address,
+          imageData: tempImageData,
+          prompt
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to save portrait");
+      }
+      
+      // Update the image URL to the saved R2 URL
+      setImageUrl(data.imageUrl);
+      setTempImageData(""); // Clear the temporary image data
+      setIsEditing(false); // Exit editing mode
+      setHasPortrait(true); // Mark that we now have a portrait
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to save portrait";
+      setError(errorMessage);
+      console.error("Error saving portrait:", err);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [address, tempImageData, prompt]);
+  
+  // Handle canceling the portrait generation
+  const handleCancelGeneration = useCallback(() => {
+    setTempImageData("");
+    setIsEditing(false);
+    setError("");
+    
+    // If we had an existing portrait, restore it
+    if (hasPortrait) {
+      fetch(`/api/portrait?address=${address}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success && data.imageUrl) {
+            setImageUrl(data.imageUrl);
+          }
+        })
+        .catch(error => console.error("Error restoring portrait:", error));
+    } else {
+      setImageUrl(""); // No existing portrait, clear the image
+    }
+  }, [address, hasPortrait]);
   
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-zinc-900 to-black">
@@ -104,11 +203,15 @@ function PortraitContent() {
           {/* Main Content Area - Only the Image */}
           <div className="flex-1 flex items-center justify-center bg-zinc-900 m-4 rounded-lg overflow-hidden z-0">
             <div className="relative w-full h-full rounded-lg overflow-hidden bg-zinc-800 shadow-xl">
-              {isGenerating ? (
+              {loading ? (
                 <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
                   <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-500"></div>
                 </div>
-              ) : (
+              ) : isGenerating || isSaving ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
+                  <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-500"></div>
+                </div>
+              ) : imageUrl ? (
                 <>
                   <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 z-10"></div>
                   <Image 
@@ -119,6 +222,20 @@ function PortraitContent() {
                     className="z-0"
                   />
                 </>
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+                  {isOwner ? (
+                    <>
+                      <div className="text-amber-500 text-2xl mb-2">✨</div>
+                      <p className="text-zinc-400">Create your portrait by clicking the button below</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-amber-500 text-2xl mb-2">🖼️</div>
+                      <p className="text-zinc-400">No portrait found for this address</p>
+                    </>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -129,7 +246,7 @@ function PortraitContent() {
           Viewing portrait for address: {address || "No address specified"}
         </div>
         
-        {/* Edit Controls - Completely Outside Frame */}
+        {/* Edit Controls - Only show for owner */}
         {isOwner && (
           <div className="w-full bg-zinc-800 p-4 rounded-lg">
             {isEditing ? (
@@ -139,7 +256,7 @@ function PortraitContent() {
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Describe yourself or a character for your portrait..."
                   className="w-full p-3 bg-zinc-700 border border-zinc-600 rounded-md text-zinc-100 min-h-[100px] resize-none"
-                  disabled={isGenerating}
+                  disabled={isGenerating || isSaving}
                 />
                 
                 <div className="text-xs text-zinc-400 px-1">
@@ -152,32 +269,53 @@ function PortraitContent() {
                   </div>
                 )}
                 
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleGenerateImage}
-                    disabled={isGenerating}
-                    className="flex-1 px-4 py-2 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGenerating ? "Generating..." : "Generate Portrait"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsEditing(false);
-                      setError("");
-                    }}
-                    disabled={isGenerating}
-                    className="px-4 py-2 bg-zinc-700 text-zinc-100 rounded-md hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                {tempImageData ? (
+                  // If we have a generated image but not saved yet, show save/cancel options
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleSavePortrait}
+                      disabled={isSaving}
+                      className="flex-1 px-4 py-2 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSaving ? "Saving..." : "Save Portrait"}
+                    </button>
+                    <button
+                      onClick={handleCancelGeneration}
+                      disabled={isSaving}
+                      className="px-4 py-2 bg-zinc-700 text-zinc-100 rounded-md hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  // If we're just in editing mode but haven't generated yet
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleGenerateImage}
+                      disabled={isGenerating}
+                      className="flex-1 px-4 py-2 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isGenerating ? "Generating..." : "Generate Portrait"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditing(false);
+                        setError("");
+                      }}
+                      disabled={isGenerating}
+                      className="px-4 py-2 bg-zinc-700 text-zinc-100 rounded-md hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <button
                 onClick={() => setIsEditing(true)}
                 className="w-full px-4 py-2 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors"
               >
-                Generate New Portrait
+                {hasPortrait ? "Generate New Portrait" : "Create Your Portrait"}
               </button>
             )}
           </div>
