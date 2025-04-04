@@ -1,3 +1,19 @@
 [build]
   command = "pnpm run build"
   publish = "build"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[[plugins]]
+  package = "/netlify/plugins/environment-plugin"
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["build/server/**", ".env"]
+
+# Redirect all requests to Next.js
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/server"
+  status = 200

@@ -15,9 +15,12 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   
-  // Disable static optimization to fix React 19 compatibility issues
+  // Configuration for Netlify deployment
   experimental: {
     disableOptimizedLoading: true,
+    // Enable when deployed on Netlify
+    isrMemoryCacheSize: 0,
+    serverComponentsExternalPackages: ['pg']
   },
   
   // Images configuration
@@ -28,6 +31,7 @@ const nextConfig = {
         hostname: '**',
       },
     ],
+    unoptimized: process.env.NODE_ENV === 'production', // Unoptimize images for Netlify deployment
   },
 };
 
