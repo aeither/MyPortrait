@@ -3,91 +3,19 @@
 import { useSearchParams } from "next/navigation";
 import { useState, useCallback, Suspense, useEffect } from "react";
 import Image from "next/image";
-import dynamic from "next/dynamic";
 import { UpProvider, useUpProvider } from "../components/upProvider";
-
-// Create a robust NoSSR component to prevent any server-side rendering
-function NoSSR({ children, fallback = null }: { children: React.ReactNode; fallback?: React.ReactNode }) {
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  if (!isMounted) {
-    return <>{fallback}</>;
-  }
-
-  return <>{children}</>;
-}
-
-// Wrapper component with error boundary
-function SafePortraitContent() {
-  const [hasError, setHasError] = useState(false);
-  
-  useEffect(() => {
-    // Set up global error handler
-    const errorHandler = (error: ErrorEvent) => {
-      console.error("Global error caught:", error);
-      setHasError(true);
-    };
-    
-    // Only add event listener on client-side
-    if (typeof window !== 'undefined') {
-      window.addEventListener('error', errorHandler);
-      
-      return () => {
-        window.removeEventListener('error', errorHandler);
-      };
-    }
-  }, []);
-  
-  if (hasError) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-zinc-900 to-black">
-        <div className="w-full max-w-sm text-center">
-          <h1 className="text-2xl font-bold text-red-500 mb-4">Something went wrong</h1>
-          <p className="text-zinc-300 mb-4">We encountered an error loading your portrait</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
-  
-  try {
-    return <PortraitContent />;
-  } catch (error) {
-    console.error("Error rendering PortraitContent:", error);
-    setHasError(true);
-    return null;
-  }
-}
 
 // Separate component that uses useSearchParams
 function PortraitContent() {
   const searchParams = useSearchParams();
-  
-  // Add fallback for Vercel deployment if useUpProvider fails
-  let upProviderValues = { accounts: [], walletConnected: false };
-  try {
-    upProviderValues = useUpProvider();
-  } catch (error) {
-    console.error("Error using UpProvider:", error);
-  }
-  
-  const { accounts, walletConnected } = upProviderValues;
+  const { accounts, walletConnected } = useUpProvider();
   
   // Get address from URL params
-  const addressParam = searchParams?.get("address");
+  const addressParam = searchParams.get("address");
   const address = addressParam ? addressParam.toLowerCase() : null;
   
   // Get connected wallet address
-  const connectedAddress = accounts && accounts.length > 0 
+  const connectedAddress = accounts.length > 0 
     ? accounts[0].toLowerCase() 
     : null;
   
@@ -104,9 +32,6 @@ function PortraitContent() {
   
   // Check if the user is the owner of this portrait
   const isOwner = walletConnected && address === connectedAddress;
-
-  // Safely check if we're on client-side before accessing window
-  const isBrowser = typeof window !== 'undefined';
 
   // Fetch portrait from database when component mounts
   useEffect(() => {
@@ -136,10 +61,7 @@ function PortraitContent() {
       }
     }
     
-    // Only fetch if we're in the browser
-    if (typeof window !== 'undefined') {
-      fetchPortrait();
-    }
+    fetchPortrait();
   }, [address]);
   
   // Handle image generation
@@ -298,7 +220,6 @@ function PortraitContent() {
                     fill 
                     style={{ objectFit: "contain" }}
                     className="z-0"
-                    unoptimized={true}  // Add this to prevent image optimization issues
                   />
                 </>
               ) : (
@@ -407,7 +328,7 @@ function PortraitContent() {
 // Loading fallback component
 function PortraitLoading() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen min-w-full w-screen p-4 bg-gradient-to-br from-zinc-900 to-black fixed inset-0">
+    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-zinc-900 to-black">
       <div className="w-full max-w-sm flex flex-col gap-4 items-center">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-500"></div>
         <p className="text-zinc-400">Loading portrait...</p>
@@ -416,48 +337,13 @@ function PortraitLoading() {
   );
 }
 
-// Improved SafePortraitWrapper with NoSSR 
-const SafePortraitWrapper = () => {
-  // Instead of using useState and useEffect, use the NoSSR component
-  return (
-    <NoSSR fallback={<PortraitLoading />}>
-      <UpProvider>
-        <SafePortraitContent />
-      </UpProvider>
-    </NoSSR>
-  );
-};
-
-// Create a completely client-side only version of the page
-// This prevents any hydration issues by ensuring it never renders on the server
-const ClientOnly = ({ children }: { children: React.ReactNode }) => {
-  const [hasMounted, setHasMounted] = useState(false);
-  
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
-  
-  if (!hasMounted) {
-    return <PortraitLoading />;
-  }
-  
-  return <>{children}</>;
-};
-
-// Using dynamic import with loading state and strict client-side rendering
-const DynamicPortraitPage = dynamic(
-  () => Promise.resolve(() => (
-    <ClientOnly>
-      <SafePortraitWrapper />
-    </ClientOnly>
-  )),
-  { 
-    ssr: false,
-    loading: () => <PortraitLoading />
-  }
-);
-
+// Main component with Suspense boundary
 export default function PortraitPage() {
-  // This ensures the page only renders client-side
-  return <DynamicPortraitPage />;
+  return (
+    <Suspense fallback={<PortraitLoading />}>
+      <UpProvider>
+        <PortraitContent />
+      </UpProvider>
+    </Suspense>
+  );
 }

@@ -15,12 +15,15 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   
-  // Configuration for Netlify deployment
+  // External packages that should be processed by Node.js
+  serverExternalPackages: ['pg'],
+  
+  // Configuration for production deployment
   experimental: {
+    // Disable optimized loading to prevent hydration issues
     disableOptimizedLoading: true,
-    // Enable when deployed on Netlify
-    isrMemoryCacheSize: 0,
-    serverComponentsExternalPackages: ['pg']
+    // Improve client-side rendering reliability
+    optimizeCss: false
   },
   
   // Images configuration

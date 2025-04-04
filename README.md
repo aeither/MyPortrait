@@ -64,10 +64,10 @@ The application leverages advanced AI image generation to create custom portrait
 To embed your portrait on your profile:
 
 ```bash
-https://basically-enough-clam.ngrok-free.app/portrait?address=0xYOUR_ADDRESS_HERE
+https://my-portrait-wheat.vercel.app/portrait?address=0xYOUR_ADDRESS_HERE
 ```
 
 Replace `0xYOUR_ADDRESS_HERE` with your blockchain address. Example:
 ```bash
-https://basically-enough-clam.ngrok-free.app/portrait?address=0xB96Bd2BA2d0e785d0408dc17af8bcCC7e1413Ad6
+https://my-portrait-wheat.vercel.app/portrait?address=0xB96Bd2BA2d0e785d0408dc17af8bcCC7e1413Ad6
 ```
