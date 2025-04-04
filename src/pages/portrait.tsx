@@ -3,97 +3,26 @@
 import { useSearchParams } from "next/navigation";
 import { useState, useCallback, Suspense, useEffect } from "react";
 import Image from "next/image";
-import dynamic from "next/dynamic";
 import { UpProvider, useUpProvider } from "../components/upProvider";
-
-// Create a robust NoSSR component to prevent any server-side rendering
-function NoSSR({ children, fallback = null }: { children: React.ReactNode; fallback?: React.ReactNode }) {
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  if (!isMounted) {
-    return <>{fallback}</>;
-  }
-
-  return <>{children}</>;
-}
-
-// Wrapper component with error boundary
-function SafePortraitContent() {
-  const [hasError, setHasError] = useState(false);
-  
-  useEffect(() => {
-    // Set up global error handler
-    const errorHandler = (error: ErrorEvent) => {
-      console.error("Global error caught:", error);
-      setHasError(true);
-    };
-    
-    // Only add event listener on client-side
-    if (typeof window !== 'undefined') {
-      window.addEventListener('error', errorHandler);
-      
-      return () => {
-        window.removeEventListener('error', errorHandler);
-      };
-    }
-  }, []);
-  
-  if (hasError) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-zinc-900 to-black">
-        <div className="w-full max-w-sm text-center">
-          <h1 className="text-2xl font-bold text-red-500 mb-4">Something went wrong</h1>
-          <p className="text-zinc-300 mb-4">We encountered an error loading your portrait</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
-  
-  try {
-    return <PortraitContent />;
-  } catch (error) {
-    console.error("Error rendering PortraitContent:", error);
-    setHasError(true);
-    return null;
-  }
-}
+import ClientOnly from "../components/ClientOnly";
 
 // Separate component that uses useSearchParams
 function PortraitContent() {
   const searchParams = useSearchParams();
-  
-  // Add fallback for Vercel deployment if useUpProvider fails
-  let upProviderValues = { accounts: [], walletConnected: false };
-  try {
-    upProviderValues = useUpProvider();
-  } catch (error) {
-    console.error("Error using UpProvider:", error);
-  }
-  
-  const { accounts, walletConnected } = upProviderValues;
-  
+  const { accounts, walletConnected } = useUpProvider();
+
   // Get address from URL params
-  const addressParam = searchParams?.get("address");
+  const addressParam = searchParams.get("address");
   const address = addressParam ? addressParam.toLowerCase() : null;
-  
+
   // Get connected wallet address
-  const connectedAddress = accounts && accounts.length > 0 
-    ? accounts[0].toLowerCase() 
+  const connectedAddress = accounts.length > 0
+    ? accounts[0].toLowerCase()
     : null;
-  
+
   // State for image and prompt
   const [imageUrl, setImageUrl] = useState("");
-  const [tempImageData, setTempImageData] = useState(""); 
+  const [tempImageData, setTempImageData] = useState("");
   const [prompt, setPrompt] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -101,12 +30,9 @@ function PortraitContent() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [hasPortrait, setHasPortrait] = useState(false);
-  
+
   // Check if the user is the owner of this portrait
   const isOwner = walletConnected && address === connectedAddress;
-
-  // Safely check if we're on client-side before accessing window
-  const isBrowser = typeof window !== 'undefined';
 
   // Fetch portrait from database when component mounts
   useEffect(() => {
@@ -115,11 +41,11 @@ function PortraitContent() {
         setLoading(false);
         return;
       }
-      
+
       try {
         setLoading(true);
         const response = await fetch(`/api/portrait?address=${address}`);
-        
+
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.imageUrl) {
@@ -135,24 +61,21 @@ function PortraitContent() {
         setLoading(false);
       }
     }
-    
-    // Only fetch if we're in the browser
-    if (typeof window !== 'undefined') {
-      fetchPortrait();
-    }
+
+    fetchPortrait();
   }, [address]);
-  
+
   // Handle image generation
   const handleGenerateImage = useCallback(async () => {
     if (!prompt.trim()) {
       setError("Please enter a description for your portrait");
       return;
     }
-    
+
     try {
       setIsGenerating(true);
       setError("");
-      
+
       const response = await fetch("/api/portrait", {
         method: "POST",
         headers: {
@@ -163,19 +86,19 @@ function PortraitContent() {
           systemPrompt: "Create a portrait with a whimsical, hand-drawn animation style. Use soft, watercolor-like backgrounds, vibrant colors, and expressive eyes. The character should have a sense of wonder and innocence, with detailed but simplified features."
         }),
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to generate image");
       }
-      
+
       // Save the generated image data to state (not saved to R2 yet)
       setTempImageData(data.imageData);
-      
+
       // Display the image in the UI
       setImageUrl(`data:image/webp;base64,${data.imageData}`);
-      
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to generate image";
       setError(errorMessage);
@@ -184,18 +107,18 @@ function PortraitContent() {
       setIsGenerating(false);
     }
   }, [prompt]);
-  
+
   // Handle saving the generated image to R2 and database
   const handleSavePortrait = useCallback(async () => {
     if (!address || !tempImageData) {
       setError("Cannot save portrait: missing address or image data");
       return;
     }
-    
+
     try {
       setIsSaving(true);
       setError("");
-      
+
       const response = await fetch("/api/portrait", {
         method: "PUT",
         headers: {
@@ -207,19 +130,19 @@ function PortraitContent() {
           prompt
         }),
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to save portrait");
       }
-      
+
       // Update the image URL to the saved R2 URL
       setImageUrl(data.imageUrl);
       setTempImageData(""); // Clear the temporary image data
       setIsEditing(false); // Exit editing mode
       setHasPortrait(true); // Mark that we now have a portrait
-      
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to save portrait";
       setError(errorMessage);
@@ -228,13 +151,13 @@ function PortraitContent() {
       setIsSaving(false);
     }
   }, [address, tempImageData, prompt]);
-  
+
   // Handle canceling the portrait generation
   const handleCancelGeneration = useCallback(() => {
     setTempImageData("");
     setIsEditing(false);
     setError("");
-    
+
     // If we had an existing portrait, restore it
     if (hasPortrait) {
       fetch(`/api/portrait?address=${address}`)
@@ -249,7 +172,7 @@ function PortraitContent() {
       setImageUrl(""); // No existing portrait, clear the image
     }
   }, [address, hasPortrait]);
-  
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-zinc-900 to-black">
       <div className="w-full max-w-sm flex flex-col gap-4">
@@ -259,25 +182,25 @@ function PortraitContent() {
             {isOwner ? "Your Portrait" : "Portrait"}
           </h1>
         </div>
-        
+
         {/* Portrait Card with Luxurious Frame */}
         <div className="aspect-square flex flex-col relative rounded-xl overflow-hidden">
           {/* Ornate Frame - Top Edge */}
           <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-600 z-10"></div>
-          
+
           {/* Ornate Frame - Left & Right Edges */}
           <div className="absolute top-0 left-0 w-4 h-full bg-gradient-to-b from-amber-600 via-yellow-400 to-amber-600 z-10"></div>
           <div className="absolute top-0 right-0 w-4 h-full bg-gradient-to-b from-amber-600 via-yellow-400 to-amber-600 z-10"></div>
-          
+
           {/* Ornate Frame - Bottom Edge */}
           <div className="absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-600 z-10"></div>
-          
+
           {/* Corner Decorations */}
           <div className="absolute top-0 left-0 w-8 h-8 bg-amber-500 rounded-br-lg z-20"></div>
           <div className="absolute top-0 right-0 w-8 h-8 bg-amber-500 rounded-bl-lg z-20"></div>
           <div className="absolute bottom-0 left-0 w-8 h-8 bg-amber-500 rounded-tr-lg z-20"></div>
           <div className="absolute bottom-0 right-0 w-8 h-8 bg-amber-500 rounded-tl-lg z-20"></div>
-          
+
           {/* Main Content Area - Only the Image */}
           <div className="flex-1 flex items-center justify-center bg-zinc-900 m-4 rounded-lg overflow-hidden z-0">
             <div className="relative w-full h-full rounded-lg overflow-hidden bg-zinc-800 shadow-xl">
@@ -292,13 +215,12 @@ function PortraitContent() {
               ) : imageUrl ? (
                 <>
                   <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 z-10"></div>
-                  <Image 
-                    src={imageUrl} 
-                    alt="User Portrait" 
-                    fill 
+                  <Image
+                    src={imageUrl}
+                    alt="User Portrait"
+                    fill
                     style={{ objectFit: "contain" }}
                     className="z-0"
-                    unoptimized={true}  // Add this to prevent image optimization issues
                   />
                 </>
               ) : (
@@ -319,12 +241,12 @@ function PortraitContent() {
             </div>
           </div>
         </div>
-        
+
         {/* Address Information Outside Frame */}
         <div className="w-full text-sm text-zinc-400 text-center mb-2">
           Viewing portrait for address: {address || "No address specified"}
         </div>
-        
+
         {/* Edit Controls - Only show for owner */}
         {isOwner && (
           <div className="w-full bg-zinc-800 p-4 rounded-lg">
@@ -337,17 +259,17 @@ function PortraitContent() {
                   className="w-full p-3 bg-zinc-700 border border-zinc-600 rounded-md text-zinc-100 min-h-[100px] resize-none"
                   disabled={isGenerating || isSaving}
                 />
-                
+
                 <div className="text-xs text-zinc-400 px-1">
                   <p>Try prompts like "a young adventurer with short brown hair and a green hat" or "a wise elder with flowing white beard and kind eyes"</p>
                 </div>
-                
+
                 {error && (
                   <div className="text-red-500 text-sm p-2 bg-red-500/20 rounded-md">
                     {error}
                   </div>
                 )}
-                
+
                 {tempImageData ? (
                   // If we have a generated image but not saved yet, show save/cancel options
                   <div className="flex gap-3">
@@ -407,7 +329,7 @@ function PortraitContent() {
 // Loading fallback component
 function PortraitLoading() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen min-w-full w-screen p-4 bg-gradient-to-br from-zinc-900 to-black fixed inset-0">
+    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-zinc-900 to-black">
       <div className="w-full max-w-sm flex flex-col gap-4 items-center">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-500"></div>
         <p className="text-zinc-400">Loading portrait...</p>
@@ -416,48 +338,15 @@ function PortraitLoading() {
   );
 }
 
-// Improved SafePortraitWrapper with NoSSR 
-const SafePortraitWrapper = () => {
-  // Instead of using useState and useEffect, use the NoSSR component
-  return (
-    <NoSSR fallback={<PortraitLoading />}>
-      <UpProvider>
-        <SafePortraitContent />
-      </UpProvider>
-    </NoSSR>
-  );
-};
-
-// Create a completely client-side only version of the page
-// This prevents any hydration issues by ensuring it never renders on the server
-const ClientOnly = ({ children }: { children: React.ReactNode }) => {
-  const [hasMounted, setHasMounted] = useState(false);
-  
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
-  
-  if (!hasMounted) {
-    return <PortraitLoading />;
-  }
-  
-  return <>{children}</>;
-};
-
-// Using dynamic import with loading state and strict client-side rendering
-const DynamicPortraitPage = dynamic(
-  () => Promise.resolve(() => (
-    <ClientOnly>
-      <SafePortraitWrapper />
-    </ClientOnly>
-  )),
-  { 
-    ssr: false,
-    loading: () => <PortraitLoading />
-  }
-);
-
+// Main component with Suspense boundary
 export default function PortraitPage() {
-  // This ensures the page only renders client-side
-  return <DynamicPortraitPage />;
+  return (
+    <Suspense fallback={<PortraitLoading />}>
+      <ClientOnly>
+        <UpProvider>
+          <PortraitContent />
+        </UpProvider>
+      </ClientOnly>
+    </Suspense>
+  );
 }
