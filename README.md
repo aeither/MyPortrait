@@ -2,6 +2,10 @@
 
 ![banner](https://github.com/user-attachments/assets/a4716e90-40aa-482d-9abd-67b4abae3863)
 
+## DEMO
+
+https://universaleverything.io/0xB96Bd2BA2d0e785d0408dc17af8bcCC7e1413Ad6?assetGroup=grid
+
 ## Description
 MyPortrait is a Lukso Mini App that allows users to generate and save personalized AI-powered portraits linked to their blockchain addresses. With a focus on creating whimsical, Studio Ghibli-inspired artwork, users can describe themselves through text prompts and receive unique, artistic representations to showcase their digital identity.
 
