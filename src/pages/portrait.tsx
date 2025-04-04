@@ -30,11 +30,12 @@ function PortraitContent() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [hasPortrait, setHasPortrait] = useState(false);
+  const [timestamp, setTimestamp] = useState(Date.now()); // Add timestamp for cache busting
 
   // Check if the user is the owner of this portrait
   const isOwner = walletConnected && address === connectedAddress;
 
-  // Fetch portrait from database when component mounts
+  // Fetch existing portrait on load
   useEffect(() => {
     async function fetchPortrait() {
       if (!address) {
@@ -49,8 +50,10 @@ function PortraitContent() {
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.imageUrl) {
-            setImageUrl(data.imageUrl);
+            // Add timestamp as a query parameter to bust the cache
+            setImageUrl(`${data.imageUrl}?t=${timestamp}`);
             setHasPortrait(true);
+            setPrompt(data.prompt || "");
           }
         } else {
           console.log("No existing portrait found");
@@ -63,7 +66,7 @@ function PortraitContent() {
     }
 
     fetchPortrait();
-  }, [address]);
+  }, [address, timestamp]);
 
   // Handle image generation
   const handleGenerateImage = useCallback(async () => {
@@ -102,7 +105,6 @@ function PortraitContent() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to generate image";
       setError(errorMessage);
-      console.error("Error generating portrait:", err);
     } finally {
       setIsGenerating(false);
     }
@@ -111,7 +113,7 @@ function PortraitContent() {
   // Handle saving the generated image to R2 and database
   const handleSavePortrait = useCallback(async () => {
     if (!address || !tempImageData) {
-      setError("Cannot save portrait: missing address or image data");
+      setError("Cannot save without an address and image");
       return;
     }
 
@@ -137,16 +139,16 @@ function PortraitContent() {
         throw new Error(data.error || "Failed to save portrait");
       }
 
-      // Update the image URL to the saved R2 URL
-      setImageUrl(data.imageUrl);
+      // Update the image URL to the saved R2 URL with timestamp for cache busting
+      const newTimestamp = Date.now();
+      setImageUrl(`${data.imageUrl}?t=${newTimestamp}`);
+      setTimestamp(newTimestamp);
       setTempImageData(""); // Clear the temporary image data
-      setIsEditing(false); // Exit editing mode
       setHasPortrait(true); // Mark that we now have a portrait
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to save portrait";
       setError(errorMessage);
-      console.error("Error saving portrait:", err);
     } finally {
       setIsSaving(false);
     }
@@ -155,7 +157,6 @@ function PortraitContent() {
   // Handle canceling the portrait generation
   const handleCancelGeneration = useCallback(() => {
     setTempImageData("");
-    setIsEditing(false);
     setError("");
 
     // If we had an existing portrait, restore it
@@ -164,21 +165,24 @@ function PortraitContent() {
         .then(response => response.json())
         .then(data => {
           if (data.success && data.imageUrl) {
-            setImageUrl(data.imageUrl);
+            // Add timestamp as a query parameter to bust the cache
+            setImageUrl(`${data.imageUrl}?t=${timestamp}`);
           }
         })
-        .catch(error => console.error("Error restoring portrait:", error));
+        .catch(err => {
+          console.error("Error restoring portrait:", err);
+        });
     } else {
       setImageUrl(""); // No existing portrait, clear the image
     }
-  }, [address, hasPortrait]);
+  }, [address, hasPortrait, timestamp]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-zinc-900 to-black">
-      <div className="w-full max-w-sm flex flex-col gap-4">
-        {/* Title Outside Frame */}
-        <div className="w-full text-center">
-          <h1 className="text-2xl font-bold text-zinc-100">
+      <div className="w-full max-w-xl flex flex-col gap-6">
+        {/* Title */}
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-amber-500 tracking-tight">
             {isOwner ? "Your Portrait" : "Portrait"}
           </h1>
         </div>
@@ -205,12 +209,9 @@ function PortraitContent() {
           <div className="flex-1 flex items-center justify-center bg-zinc-900 m-4 rounded-lg overflow-hidden z-0">
             <div className="relative w-full h-full rounded-lg overflow-hidden bg-zinc-800 shadow-xl">
               {loading ? (
-                <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
-                  <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-500"></div>
-                </div>
-              ) : isGenerating || isSaving ? (
-                <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
-                  <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-500"></div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-500"></div>
+                  <p className="text-zinc-400 mt-4">Loading portrait...</p>
                 </div>
               ) : imageUrl ? (
                 <>
@@ -224,18 +225,10 @@ function PortraitContent() {
                   />
                 </>
               ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                  {isOwner ? (
-                    <>
-                      <div className="text-amber-500 text-2xl mb-2">✨</div>
-                      <p className="text-zinc-400">Create your portrait by clicking the button below</p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-amber-500 text-2xl mb-2">🖼️</div>
-                      <p className="text-zinc-400">No portrait found for this address</p>
-                    </>
-                  )}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <p className="text-zinc-400 text-center p-4">
+                    {address ? "No portrait found for this address" : "No address specified"}
+                  </p>
                 </div>
               )}
             </div>
@@ -250,12 +243,12 @@ function PortraitContent() {
         {/* Edit Controls - Only show for owner */}
         {isOwner && (
           <div className="w-full bg-zinc-800 p-4 rounded-lg">
-            {isEditing ? (
-              <div className="space-y-3">
+            {isEditing || tempImageData ? (
+              <>
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Describe yourself or a character for your portrait..."
+                  placeholder="Describe yourself for the portrait..."
                   className="w-full p-3 bg-zinc-700 border border-zinc-600 rounded-md text-zinc-100 min-h-[100px] resize-none"
                   disabled={isGenerating || isSaving}
                 />
@@ -276,47 +269,44 @@ function PortraitContent() {
                     <button
                       onClick={handleSavePortrait}
                       disabled={isSaving}
-                      className="flex-1 px-4 py-2 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className={`mt-4 flex-1 p-3 ${isSaving ? 'bg-amber-700' : 'bg-amber-500'} text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors`}
                     >
-                      {isSaving ? "Saving..." : "Save Portrait"}
+                      {isSaving ? 'Saving...' : 'Save Portrait'}
                     </button>
                     <button
                       onClick={handleCancelGeneration}
                       disabled={isSaving}
-                      className="px-4 py-2 bg-zinc-700 text-zinc-100 rounded-md hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="mt-4 flex-1 p-3 bg-zinc-600 text-zinc-100 font-medium rounded-md hover:bg-zinc-500 transition-colors"
                     >
                       Cancel
                     </button>
                   </div>
                 ) : (
-                  // If we're just in editing mode but haven't generated yet
+                  // If we're editing but haven't generated yet
                   <div className="flex gap-3">
                     <button
                       onClick={handleGenerateImage}
-                      disabled={isGenerating}
-                      className="flex-1 px-4 py-2 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={isGenerating || !prompt.trim()}
+                      className={`mt-4 flex-1 p-3 ${isGenerating ? 'bg-amber-700' : 'bg-amber-500'} text-zinc-900 font-medium rounded-md ${!prompt.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-400'} transition-colors`}
                     >
-                      {isGenerating ? "Generating..." : "Generate Portrait"}
+                      {isGenerating ? 'Generating...' : 'Generate Portrait'}
                     </button>
                     <button
-                      onClick={() => {
-                        setIsEditing(false);
-                        setError("");
-                      }}
-                      disabled={isGenerating}
-                      className="px-4 py-2 bg-zinc-700 text-zinc-100 rounded-md hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => setIsEditing(false)}
+                      className="mt-4 flex-1 p-3 bg-zinc-600 text-zinc-100 font-medium rounded-md hover:bg-zinc-500 transition-colors"
                     >
                       Cancel
                     </button>
                   </div>
                 )}
-              </div>
+              </>
             ) : (
+              // Not in edit mode, show the Edit button
               <button
                 onClick={() => setIsEditing(true)}
-                className="w-full px-4 py-2 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors"
+                className="w-full p-3 bg-amber-500 text-zinc-900 font-medium rounded-md hover:bg-amber-400 transition-colors"
               >
-                {hasPortrait ? "Generate New Portrait" : "Create Your Portrait"}
+                {hasPortrait ? 'Edit Portrait' : 'Create Your Portrait'}
               </button>
             )}
           </div>
